@@ -1,0 +1,1 @@
+python eval.py -a vgg19_bn -d cifar10 --resume /home/param/Casablanca/Codes/OrthogonalLowrankEmbedding/pytorch_OLE/results/vgg19_bn/cifar10/21032c03-c133-499c-adc6-bc81f657c98f/model_best.pth.tar

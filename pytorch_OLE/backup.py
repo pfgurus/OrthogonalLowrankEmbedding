@@ -25,6 +25,6 @@ def backup_code(outfname, folder, extensions, exclude_list):
     for filename in filenames:
         zf.write(filename)
     zf.close()
-    print 'saved %i files to %s' % (len(filenames), outfname)
+    print ('saved %i files to %s' % (len(filenames), outfname))
 
 

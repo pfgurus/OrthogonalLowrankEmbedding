@@ -1,0 +1,1 @@
+python cifar.py -a vgg19_bn --dataset cifar10 --epochs 164 --schedule 81 122 --gamma 0.1 --use_ole --no_augment

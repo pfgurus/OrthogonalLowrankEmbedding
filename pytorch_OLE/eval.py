@@ -38,7 +38,7 @@ import scipy as sp
 import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
-
+import inspect
 
 
 
@@ -49,7 +49,7 @@ model_names = sorted(name for name in models.__dict__
 
 parser = argparse.ArgumentParser(description='PyTorch CIFAR10/100 Evaluation')
 # Datasets
-parser.add_argument('-d', '--dataset', default='cifar10', type=str)
+parser.add_argument('-d', '--dataset', default='cifar100', type=str)
 parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
                     help='number of data loading workers (default: 4)')
 # Optimization options
@@ -139,17 +139,17 @@ def main():
     ])
 
     if args.no_augment:
-        print 'NO DATA AUGMENTATION'
+        print ('NO DATA AUGMENTATION')
         transform_train = transform_test
     else:
-        print 'USE DATA AUGMENTATION'
+        print ('USE DATA AUGMENTATION')
         transform_train = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
-        
+
     if args.dataset == 'cifar10':
         dataloader = datasets.CIFAR10
         num_classes = 10
@@ -164,7 +164,7 @@ def main():
     testset = dataloader(root='./data', train=False, download=False, transform=transform_test)
     testloader = data.DataLoader(testset, batch_size=args.test_batch, shuffle=False, num_workers=args.workers)
 
-    # Model   
+    # Model
     print("==> creating model '{}'".format(args.arch))
     if args.arch.startswith('resnext'):
         model = models.__dict__[args.arch](
@@ -181,7 +181,7 @@ def main():
                     growthRate=args.growthRate,
                     compressionRate=args.compressionRate,
                     dropRate=args.drop,
-                )        
+                )
     elif args.arch.startswith('wrn'):
         model = models.__dict__[args.arch](
                     num_classes=num_classes,
@@ -204,22 +204,20 @@ def main():
     # use OLE loss?
     global use_OLE
 
-    print args
-    
     if args.lambda_ > 0:
-        print 'USE OLE'
+        print ('USE OLE')
         use_OLE = True
     else:
-        print 'NO OLE'
+        print ('NO OLE')
         use_OLE = False
 
 
-    if use_OLE:    
+    if use_OLE:
         assert(args.train_batch == args.test_batch)
-        print 'creating OLE criterion with lambda_=', args.lambda_
-        criterion = [nn.CrossEntropyLoss()] + [OLELoss(lambda_=args.lambda_)]
+        print ('creating OLE criterion with lambda_=', args.lambda_)
+        criterion = [nn.CrossEntropyLoss()] + [OLELoss]
     else:
-        criterion = [nn.CrossEntropyLoss()] 
+        criterion = [nn.CrossEntropyLoss()]
 
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
@@ -246,12 +244,13 @@ def main():
 
 
     ############ EVALUATE
-    
+
     print('\nEvaluation only')
     test_loss, test_acc, features, scores, labels = test(testloader, model, criterion, start_epoch, use_cuda)
     print(' Test Loss:  %.8f, Test Acc:  %.2f' % (test_loss, test_acc))
-    
-    print 'features shape', features.shape, 'scores shape', scores.shape, 'labels shape', labels.shape
+    print ('features shape', features.shape, 'scores shape', scores.shape, 'labels shape', labels.shape)
+
+    plot_tsne_embeddings(features, labels, args.resume, args.resume.split('/')[-2])
 
     U, S, V = sp.linalg.svd(features, full_matrices = False, lapack_driver='gesvd')
 
@@ -262,14 +261,14 @@ def main():
     savefolder = '/'.join(args.resume.split('/')[:-1])
     foldername = args.resume.split('/')[-2]
 
-    
-    print 'foldername is', foldername
+
+    print('foldername is', foldername)
     # create figures folder
     figuresfolder = 'figures/curves/'
     os.system('mkdir -p %s' % figuresfolder)
-    
-    print 'saving figure of', savefolder
-    
+
+    print ('saving figure of', savefolder)
+
     # plot and save
     fig = plt.figure(figsize=(6*3.13,4*3.13))
     plt.plot(S)
@@ -279,27 +278,20 @@ def main():
     plt.close()
 
     # save features
-    print 'saving data '
+    print ('saving data ')
     scipy.io.savemat('%s/%s_result.mat' % (figuresfolder, foldername), mdict={'features': features, 'scores':scores, 'labels':labels, 'acc':test_acc})
-
-
-    tmptxt = 'eigen '
-    for i in xrange(120):
-        tmptxt += '%i: %f, ' % (i, S[i])
-        # print 'eigen', S[0:120]
-    print tmptxt
 
 
     ymine = np.argmax(scores,1)
 
-    acc = np.sum(ymine==labels.astype(int))/np.float(labels.shape[0])
-    print 'accuracy %2.6f' % acc
+    acc = np.sum(ymine==labels.astype(int))/(labels.shape[0])
+    print ('accuracy %2.6f' % acc)
 
 
 
     print('Done!')
-    
-    
+
+
 
 def test(testloader, model, criterion, epoch, use_cuda):
     global best_acc
@@ -312,7 +304,7 @@ def test(testloader, model, criterion, epoch, use_cuda):
     top5 = AverageMeter()
     lowrank = AverageMeter()
     total_loss = AverageMeter()
-    
+
     # switch to evaluate mode
     model.eval()
 
@@ -354,17 +346,20 @@ def test(testloader, model, criterion, epoch, use_cuda):
         # output_Var contains scores in the first element and features in the second element
         loss = 0
         for cix, crit in enumerate(criterion):
-            losses_list [cix] = crit(outputs[cix], targets)
+            if inspect.isclass(crit):
+                losses_list[cix] = crit.apply(outputs[cix], targets)[0]
+            else:
+                losses_list[cix] = crit(outputs[cix], targets)
             loss += losses_list[cix]
 
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(outputs[0].data, targets.data, topk=(1, 5))
-        losses.update(losses_list[0].data[0], inputs.size(0))
-        top1.update(prec1[0], inputs.size(0))
-        top5.update(prec5[0], inputs.size(0))
-        total_loss.update(loss.data[0], inputs.size(0))
-        
+        losses.update(losses_list[0].item(), inputs.size(0))
+        top1.update(prec1.item(), inputs.size(0))
+        top5.update(prec5.item(), inputs.size(0))
+        total_loss.update(loss.item(), inputs.size(0))
+
         # measure elapsed time
         batch_time.update(time.time() - end)
         end = time.time()
@@ -388,6 +383,33 @@ def test(testloader, model, criterion, epoch, use_cuda):
 
     bar.finish()
     return (losses.avg, top1.avg, features, scores, labels)
+
+def plot_tsne_embeddings(features, labels, savefolder, foldername):
+    # create figures folder
+    figuresfolder = 'figures/embeddings/'
+    os.system('mkdir -p %s' % figuresfolder)
+    print ('saving figure of', savefolder)
+
+    # Get features for 10 random labels
+    labelset_10 = np.random.choice(np.unique(labels), min(10, len(np.unique(labels))), replace=False)
+    features_10 = np.zeros((0, features.shape[1]))
+    labels_10 = np.zeros((0))
+    for label in labelset_10:
+        features_10 = np.concatenate((features_10, features[labels==label,:]), 0)
+        labels_10 = np.concatenate((labels_10, labels[labels==label]), 0)
+
+    # DO Tsne
+    from sklearn.manifold import TSNE
+    tsne = TSNE(n_components=2, random_state=0)
+    features_10 = tsne.fit_transform(features_10)
+
+    # plot and save
+    fig = plt.figure(figsize=(6*3.13,4*3.13))
+    plt.scatter(features_10[:,0], features_10[:,1], c=labels_10)
+    plt.grid()
+    plt.title('%s' % (foldername))
+    plt.savefig('%s/%s_epoch.png' % (figuresfolder, foldername))
+    plt.close()
 
 
 if __name__ == '__main__':

@@ -4,7 +4,7 @@ Copyright (c) Wei YANG, 2017
 
 Modifications for use with Orthogonal Lowrank Embedding by Jose Lezama, 2017
 '''
-# from __future__ import print_function
+# from __future__ import #print_function
 
 import argparse
 import os
@@ -21,6 +21,7 @@ import torch.utils.data as data
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import models.cifar as models
+import inspect
 
 from utils import Bar, Logger, AverageMeter, accuracy, mkdir_p, savefig
 
@@ -90,13 +91,13 @@ parser.add_argument('-e', '--evaluate', dest='evaluate', action='store_true',
 parser.add_argument('--gpu_id', default='0', type=str,
                     help='id(s) for CUDA_VISIBLE_DEVICES')
 # OLE Loss
-parser.add_argument('--lambda_', type=float, default=0.25, help='OLE loss is multiplied by lambda_.')
+parser.add_argument('--use_ole', dest='use_ole', action='store_true', help='OLE loss')
 parser.add_argument( '--no_augment', dest='no_augment', action='store_true',
                     help='do not perform data augmentation')
 parser.add_argument( '--validation', dest='validation', action='store_true',
                      help='do validation (trains on 90%% of training set, evaluates on remaining 10%%)')
 parser.add_argument( '--no_print', dest='no_print', action='store_true',
-                    help='do not print to file')
+                    help='do not #print to file')
 
 
 args = parser.parse_args()
@@ -128,30 +129,19 @@ def main():
     foldername =  str(uuid.uuid4())
 
     isplus = '+' if  not args.no_augment else ''
-    
+
     savefolder = 'results/%s/%s%s/%s' % (args.arch, args.dataset, isplus, foldername)
     os.system('mkdir -p %s' % savefolder)
     args.checkpoint = savefolder
-    
+
     time.sleep(5) # wait for directory creation
-    print 'folder is ', foldername
-
-    # use sys.stdout to log to file
-    orig_stdout = sys.stdout
-    logfilename = '%s/log.txt' % (savefolder)
-    logfile = file(logfilename, 'w')
-
-    if not args.no_print:
-        print 'Printing to file %s' % logfilename
-        sys.stdout = logfile
-    else:
-        print 'Printing to stdout'
+    #print ('folder is ', foldername)
 
     backupfname = '%s/code_snapshot_%s.zip' % (savefolder, str(datetime.now()))
     backupfname = backupfname.replace(' ','_')
     backup_code(backupfname, '.', ['.py'], ['result', 'log',])
 
-    print args
+    #print args
     # END SETUP LOGGING
     ###################
 
@@ -174,17 +164,17 @@ def main():
     ])
 
     if args.no_augment:
-        print 'NO DATA AUGMENTATION'
+        print ('NO DATA AUGMENTATION')
         transform_train = transform_test
     else:
-        print 'USE DATA AUGMENTATION'
+        #print 'USE DATA AUGMENTATION'
         transform_train = transforms.Compose([
             transforms.RandomCrop(32, padding=4),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
         ])
-        
+
     if args.dataset == 'cifar10':
         dataloader = datasets.CIFAR10
         num_classes = 10
@@ -201,14 +191,14 @@ def main():
         N = len(trainset)
         train_size = int(N*.9) # use 90 % of training set for training
         valid_size = N-train_size
-    
-        print 'number of training examples is %i/%i' % (train_size,N)
+
+        #print 'number of training examples is %i/%i' % (train_size,N)
         indices = torch.randperm(N)
         train_indices = indices[:train_size]
         valid_indices = indices[train_size:]
 
         assert(set(train_indices).isdisjoint(set(valid_indices)))
-        
+
         trainloader = data.DataLoader(trainset, batch_size=args.train_batch, sampler=SubsetRandomSampler(train_indices), num_workers=args.workers)
         testloader = data.DataLoader(trainset, batch_size=args.test_batch, sampler=SubsetRandomSampler(valid_indices), num_workers=args.workers)
 
@@ -218,8 +208,8 @@ def main():
 
 
 
-    
-    # Model   
+
+    # Model
     print("==> creating model '{}'".format(args.arch))
     if args.arch.startswith('resnext'):
         model = models.__dict__[args.arch](
@@ -236,7 +226,7 @@ def main():
                     growthRate=args.growthRate,
                     compressionRate=args.compressionRate,
                     dropRate=args.drop,
-                )        
+                )
     elif args.arch.startswith('wrn'):
         model = models.__dict__[args.arch](
                     num_classes=num_classes,
@@ -254,26 +244,25 @@ def main():
 
     model = torch.nn.DataParallel(model).cuda()
     cudnn.benchmark = True
-    print('    Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
+    print(' Total params: %.2fM' % (sum(p.numel() for p in model.parameters())/1000000.0))
 
     # use OLE loss?
-    print  'lambda_ =', args.lambda_
-    lambda_ = args.lambda_
+    #print  'lambda_ =', args.lambda__
 
     global use_OLE
 
-    print args
-    
-    if lambda_>0:
+    #print args
+
+    if args.use_ole:
         use_OLE = True
     else:
         use_OLE = False
 
 
-    if use_OLE:    
-        criterion = [nn.CrossEntropyLoss()] + [OLELoss(lambda_=args.lambda_)]
+    if use_OLE:
+        criterion = [nn.CrossEntropyLoss()] + [OLELoss]
     else:
-        criterion = [nn.CrossEntropyLoss()] 
+        criterion = [nn.CrossEntropyLoss()]
 
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
 
@@ -313,7 +302,7 @@ def main():
     for epoch in range(start_epoch, args.epochs):
         adjust_learning_rate(optimizer, epoch)
 
-        print('\nEpoch: [%d | %d] LR: %f, lambda_: %f' % (epoch + 1, args.epochs, state['lr'], args.lambda_))
+        print('\nEpoch: [%d | %d] LR: %f, use_ole: %s' % (epoch + 1, args.epochs, state['lr'], args.use_ole))
 
         train_loss, train_acc = train(trainloader, model, criterion, optimizer, epoch, use_cuda)
         test_loss, test_acc = test(testloader, model, criterion, epoch, use_cuda)
@@ -336,22 +325,20 @@ def main():
     # logger.plot()
     savefig(os.path.join(args.checkpoint, 'log.eps'))
 
-    print('Best acc:')
-    print(best_acc)
+    #print('Best acc:')
+    #print(best_acc)
 
     #############
     # END LOGGING
-    sys.stdout = orig_stdout
-    logfile.close()
 
-    print '---'
-    print 'saved results to ', savefolder
+    #print '---'
+    #print 'saved results to ', savefolder
 
-    print('Done!')
-    
+    #print('Done!')
+
     # LOGGING ENDED
     ###############
-    
+
 
 def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
     # switch to train mode
@@ -359,17 +346,17 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
 
 
     if len(criterion)==2:
-        lambda_ = criterion[1].lambda_
+        lambda_ = 0.1
     else:
         lambda_ = 0.
-        
+
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
     top5 = AverageMeter()
     ole = AverageMeter()
-    
+
     end = time.time()
 
     bar = Bar('Processing', max=len(trainloader))
@@ -378,7 +365,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
         data_time.update(time.time() - end)
 
         if use_cuda:
-            inputs, targets = inputs.cuda(), targets.cuda(async=True)
+            inputs, targets = inputs.cuda(), targets.cuda()
         inputs, targets = torch.autograd.Variable(inputs), torch.autograd.Variable(targets)
 
         # compute output
@@ -389,16 +376,19 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
         # output_Var contains scores in the first element and features in the second element
         loss = 0
         for cix, crit in enumerate(criterion):
-            losses_list [cix] = crit(outputs[cix], targets)
+            if inspect.isclass(crit):
+                losses_list[cix] = crit.apply(outputs[cix], targets)[0]
+            else:
+                losses_list[cix] = crit(outputs[cix], targets)
             loss += losses_list[cix]
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(outputs[0].data, targets.data, topk=(1, 5))
-        losses.update(losses_list[0].data[0], inputs.size(0))
-        top1.update(prec1[0], inputs.size(0))
-        top5.update(prec5[0], inputs.size(0))
+        losses.update(losses_list[0].item(), inputs.size(0))
+        top1.update(prec1.item(), inputs.size(0))
+        top5.update(prec5.item(), inputs.size(0))
         if use_OLE:
-            ole.update(losses_list[1].data[0], inputs.size(0))
+            ole.update(losses_list[1].item(), inputs.size(0))
         else:
             ole.update(-1, 1)
 
@@ -428,7 +418,7 @@ def train(trainloader, model, criterion, optimizer, epoch, use_cuda):
                     )
         bar.next()
     if not args.no_print:
-        print 'Train (%i): %s (lambda_ = %f)' % (epoch, bar.suffix, lambda_)
+        print ('Train (%i): %s (lambda_ = %f)' % (epoch, bar.suffix, lambda_))
     bar.finish()
     return (losses.avg, top1.avg)
 
@@ -441,15 +431,15 @@ def test(testloader, model, criterion, epoch, use_cuda):
     top1 = AverageMeter()
     top5 = AverageMeter()
     ole = AverageMeter()
-    
+
     # switch to evaluate mode
     model.eval()
 
     if len(criterion)==2:
-        lambda_ = criterion[1].lambda_
+        lambda_ = 0.1
     else:
         lambda_ = 0
-        
+
     end = time.time()
     bar = Bar('Processing', max=len(testloader))
     for batch_idx, (inputs, targets) in enumerate(testloader):
@@ -467,16 +457,19 @@ def test(testloader, model, criterion, epoch, use_cuda):
         # output_Var contains scores in the first element and features in the second element
         loss = 0
         for cix, crit in enumerate(criterion):
-            losses_list [cix] = crit(outputs[cix], targets)
+            if inspect.isclass(crit):
+                losses_list[cix] = crit.apply(outputs[cix], targets)[0]
+            else:
+                losses_list[cix] = crit(outputs[cix], targets)
             loss += losses_list[cix]
 
         # measure accuracy and record loss
         prec1, prec5 = accuracy(outputs[0].data, targets.data, topk=(1, 5))
-        losses.update(loss.data[0], inputs.size(0))
-        top1.update(prec1[0], inputs.size(0))
-        top5.update(prec5[0], inputs.size(0))
+        losses.update(losses_list[0].item(), inputs.size(0))
+        top1.update(prec1.item(), inputs.size(0))
+        top5.update(prec5.item(), inputs.size(0))
         if use_OLE:
-            ole.update(losses_list[1].data[0], inputs.size(0))
+            ole.update(losses_list[1].item(), inputs.size(0))
         else:
             ole.update(-1, 1)
 
@@ -501,7 +494,7 @@ def test(testloader, model, criterion, epoch, use_cuda):
                     )
         bar.next()
     if not args.no_print:
-        print 'Test (%i): %s (lambda_ = %f)' % (epoch, bar.suffix, lambda_)
+        print('Test (%i): %s (lambda_ = %f)' % (epoch, bar.suffix, lambda_))
     bar.finish()
     return (losses.avg, top1.avg)
 
